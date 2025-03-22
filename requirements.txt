@@ -1,0 +1,11 @@
+numpy
+scipy
+pandas
+plotly
+streamlit
+matplotlib
+wordcloud
+streamlit-navigation-bar
+nltk
+langdetect
+scikit-learn
