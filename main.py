@@ -151,7 +151,7 @@ def create_timeline(data):
 # Function to create a word cloud
 def create_wordcloud(text, title):
     if text:
-        wordcloud = WordCloud(width=800, height=400, background_color='white').generate(text)
+        wordcloud = WordCloud(width=800, height=400, background_color='white',font_path='JustAnotherHand-Regular.ttf').generate(text)
         fig = px.imshow(wordcloud, template='plotly_dark', title=title)
         fig.update_xaxes(showticklabels=False)
         fig.update_yaxes(showticklabels=False)
