@@ -4,7 +4,78 @@ import plotly.express as px
 from wordcloud import WordCloud
 from collections import Counter
 import plotly.graph_objs as go
+from datetime import datetime
+def classify_users_by_post_frequency(data):
+    # Check if required columns are present
+    required_columns = {'username', 'post_count', 'user_creation_date'}
+    if required_columns.issubset(data.columns):
+        # Convert user_creation_date from Unix to datetime
+        data['user_creation_date'] = pd.to_datetime(data['user_creation_date'], unit='s', errors='coerce')
 
+        # Get the current date
+        current_date = datetime.now()
+
+        # Calculate the number of days since user creation
+        data['days_since_creation'] = (current_date - data['user_creation_date']).dt.days
+
+        # Calculate daily post rate
+        data['daily_post_rate'] = data['post_count'] / data['days_since_creation']
+
+        # Classify users based on daily post rate
+        def classify_user(rate):
+            if rate > 10:
+                return 'Bot'
+            elif 5 < rate <= 10:
+                return 'Potential Bot'
+            else:
+                return 'Need More Analysis'
+
+        data['user_classification'] = data['daily_post_rate'].apply(classify_user)
+
+       
+        st.write(data[['username', 'post_count', 'user_creation_date', 'days_since_creation', 'daily_post_rate', 'user_classification']])
+    else:
+        st.warning("Required columns for user classification are missing in the dataframe.")
+def create_user_creation_timeline(data):
+    # Check if required column is present
+    if 'user_creation_date' in data.columns:
+        # Convert user_creation_date from Unix to datetime
+        data['user_creation_date'] = pd.to_datetime(data['user_creation_date'], unit='s', errors='coerce')
+
+        # Group by user creation date and count unique users
+        user_creation_timeline = data.groupby(data['user_creation_date'].dt.date).size().reset_index(name='user_count')
+
+        # Create area chart
+        fig = px.area(user_creation_timeline, x='user_creation_date', y='user_count', title='User Creation Timeline',
+                       labels={'user_creation_date': 'Date', 'user_count': 'Number of Users Created'},
+                       template='plotly_dark')
+        fig.update_traces(line_color='#b30743', fillcolor='rgba(171, 22, 74, 0.2)')
+        fig.update_layout(yaxis_title='Number of Users Created')
+        st.plotly_chart(fig)
+    else:
+        st.warning("The 'user_creation_date' column is missing in the dataframe.")
+def classify_posts_by_hashtags(data):
+    # Check if required column is present
+    if 'hashtags' in data.columns:
+        # Count the number of hashtags in each post
+        data['hashtag_count'] = data['hashtags'].apply(lambda x: len(str(x).split()) if pd.notnull(x) else 0)
+
+        # Classify posts based on hashtag count
+        def classify_post(count):
+            if count > 10:
+                return 'Bot'
+            elif 5 < count <= 10:
+                return 'Potential Bot'
+            else:
+                return 'Needs More Analysis'
+
+        data['post_classification'] = data['hashtag_count'].apply(classify_post)
+
+        # Display the classification results
+        st.subheader('Post Classification Based on Hashtag Count')
+        st.write(data[['username', 'hashtags', 'hashtag_count', 'post_classification']])
+    else:
+        st.warning("The 'hashtags' column is missing in the dataframe.")
 
 def analyze_tweet_engagement(data):
     # Check if required columns are present
@@ -202,7 +273,91 @@ def create_heatmap(data):
         st.plotly_chart(fig)
     else:
         st.warning("The 'timestamp' column is missing in the dataframe.")
+def analyze_following_follower_ratio(dataframe):
+    # Check if required columns are present
+    if 'follower_count' in dataframe.columns and 'following_count' in dataframe.columns:
+        # Convert columns to numeric and handle errors
+        dataframe['follower_count'] = pd.to_numeric(dataframe['follower_count'], errors='coerce').fillna(0)
+        dataframe['following_count'] = pd.to_numeric(dataframe['following_count'], errors='coerce').fillna(0)
 
+        # Calculate the following-to-follower ratio
+        dataframe['following_follower_ratio'] = dataframe.apply(
+            lambda row: row['following_count'] / (row['follower_count'] if row['follower_count'] != 0 else 1),
+            axis=1
+        )
+
+        # Function to classify users based on the ratio and followers
+        def classify_user(row):
+            if row['follower_count'] < 10:
+                # Adjusted conditions for followers < 10
+                if row['following_follower_ratio'] > 100:
+                    return 'Bot'
+                elif 50 < row['following_follower_ratio'] <= 100:
+                    return 'Potential Bot'
+                else:
+                    return 'Need More Analysis'
+            else:
+                # Normal conditions for followers >= 10
+                if row['following_follower_ratio'] > 25:
+                    return 'Bot'
+                elif 15 <= row['following_follower_ratio'] <= 25:
+                    return 'Potential Bot'
+                else:
+                    return 'Need More Analysis'
+
+       
+        dataframe['following_follower_label'] = dataframe.apply(classify_user, axis=1)
+
+        
+        st.markdown("### Following-to-Follower Ratio Analysis")
+        st.write(dataframe[['username', 'follower_count', 'following_count', 'following_follower_ratio', 'following_follower_label']])
+
+    
+        label_counts = dataframe['following_follower_label'].value_counts().reset_index()
+        label_counts.columns = ['Classification', 'Count']
+
+        
+        ratio_csv = dataframe[['username', 'follower_count', 'following_count', 'following_follower_ratio', 'following_follower_label']].to_csv(index=False).encode('utf-8')
+        
+        
+    else:
+        st.write("Columns 'follower_count' or 'following_count' not found in the data.")
+def comprehensive_bot_analysis(dataframe):
+    
+    def final_classification(row):
+        labels = [row['following_follower_label'], row['post_classification'], row['user_classification']]
+        if 'Bot' in labels:
+            return 'Bot'
+        elif 'Potential Bot' in labels:
+            return 'Potential Bot'
+        else:
+            return 'Need More Analysis'
+
+    dataframe['final_bot_classification'] = dataframe.apply(final_classification, axis=1)
+
+    # Display the final classification results
+    st.markdown("### Comprehensive Bot Analysis Results")
+    st.write(dataframe[['username','follower_count','following_count','post_count','daily_post_rate','final_bot_classification']])
+
+    # Generate bar chart of final classifications
+    final_label_counts = dataframe['final_bot_classification'].value_counts().reset_index()
+    final_label_counts.columns = ['Classification', 'Count']
+
+    fig = px.bar(final_label_counts, x='Classification', y='Count', title='User Classification',
+                 labels={'Classification': 'Classification', 'Count': 'Number of Users'},
+                 template='plotly_dark', color='Classification',  # This assigns a different color to each category
+                 color_discrete_sequence=px.colors.qualitative.Vivid)
+    st.plotly_chart(fig)
+
+    # Allow download of the data with a unique key
+    final_csv = dataframe[['username','final_bot_classification']].to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="Download Comprehensive Bot Analysis Data as CSV",
+        data=final_csv,
+        file_name="comprehensive_bot_analysis_data.csv",
+        mime="text/csv",
+        key="download_comprehensive_data"
+    )
 # Streamlit app
 def main():
     st.title('Social Media Post Analysis')
@@ -218,6 +373,11 @@ def main():
         st.subheader('Post Creation Timeline')
         create_timeline(data)
 
+        st.subheader('User Creation Timeline')
+        create_user_creation_timeline(data)
+
+        st.subheader('User Classification Based on Post Frequency')
+        classify_users_by_post_frequency(data)
         # Word cloud of captions
         st.subheader('Word Cloud of Captions')
         if 'caption' in data.columns:
@@ -236,12 +396,17 @@ def main():
             create_wordcloud(hashtags, 'Word Cloud of Hashtags')
         else:
             st.warning("The 'hashtags' column is missing in the dataframe.")
+        
+        classify_posts_by_hashtags(data)
 
         analyze_tweet_engagement(data)
+
 
         # Top 20 users by number of posts
         st.subheader('Top 20 Users by Number of Posts')
         analyze_post_frequency(data)
+
+        analyze_following_follower_ratio(data)
 
         # Top 20 mentions
         st.subheader('Top 20 Mentions')
@@ -255,6 +420,8 @@ def main():
 
         st.subheader('Follower and Following Count Distribution')
         create_donut_charts(data)
+
+        comprehensive_bot_analysis(data)
 
 if __name__ == '__main__':
     main()
